@@ -1,5 +1,6 @@
 import io
 import json
+import time
 from pathlib import Path
 import requests
 
@@ -15,8 +16,18 @@ def _download_rows(code: str, year_from: int = 2000) -> tuple[list[dict], str]:
     next_url = base_url
     
     while next_url:
-        response = requests.get(next_url, params=params, timeout=120)
-        response.raise_for_status()
+        # Reîncercare automată în caz de eroare temporară (503 / 500)
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                response = requests.get(next_url, params=params, timeout=120)
+                response.raise_for_status()
+                break
+            except requests.exceptions.HTTPError as e:
+                if attempt == max_retries - 1:
+                    raise e
+                time.sleep(2)  # așteaptă 2 secunde înainte de a reîncerca
+
         payload = response.json()
         
         if not isinstance(payload, dict):
@@ -29,7 +40,7 @@ def _download_rows(code: str, year_from: int = 2000) -> tuple[list[dict], str]:
         rows.extend(value)
         next_link = payload.get("@odata.nextLink")
         next_url = next_link if isinstance(next_link, str) else None
-        params = None  # nextLink include deja filter-ul
+        params = None
 
     return rows, base_url
 
